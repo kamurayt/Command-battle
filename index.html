@@ -1,0 +1,1427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARENA TACTICS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Noto+Sans+JP:wght@400;700&display=swap');
+
+  :root {
+    --bg:       #0a0c14;
+    --panel:    #111627;
+    --border:   #1e2d4a;
+    --ally:     #2a6fff;
+    --ally-dim: #1a3d8a;
+    --enemy:    #cc2233;
+    --enemy-dim:#7a1020;
+    --gold:     #c9a227;
+    --silver:   #a0b4cc;
+    --text:     #d4e4f7;
+    --muted:    #5a7090;
+    --cell:     #0d1525;
+    --cell-h:   #1a2a44;
+    --move-h:   rgba(42,111,255,0.25);
+    --atk-h:    rgba(204,34,51,0.30);
+    --skill-h:  rgba(201,162,39,0.30);
+    --green:    #2ecc71;
+    --purple:   #9b59b6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 22px;
+    letter-spacing: 6px;
+    color: var(--gold);
+    text-shadow: 0 0 20px rgba(201,162,39,0.5);
+    padding: 12px 0 8px;
+  }
+
+  #app {
+    width: 100%;
+    max-width: 980px;
+    padding: 0 8px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* ── TURN BANNER ── */
+  #turn-banner {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #turn-info { font-family: 'Cinzel', serif; font-size: 13px; color: var(--gold); }
+  #phase-info { font-size: 12px; color: var(--silver); }
+
+  /* ── MAIN LAYOUT ── */
+  #main-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  /* ── FIELD ── */
+  #field-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #field {
+    display: grid;
+    gap: 2px;
+    background: #070b12;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+
+  .cell {
+    background: var(--cell);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.12s;
+    aspect-ratio: 1;
+    font-size: clamp(8px, 1.4vw, 14px);
+  }
+  .cell:hover { background: var(--cell-h); }
+  .cell.move-range { background: var(--move-h); }
+  .cell.atk-range  { background: var(--atk-h); }
+  .cell.skill-range { background: var(--skill-h); }
+  .cell.selected { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .cell.acted { opacity: 0.55; }
+
+  .unit-icon {
+    width: 80%;
+    height: 80%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: inherit;
+    font-weight: bold;
+    position: relative;
+    border: 2px solid transparent;
+  }
+  .unit-icon.ally  { background: var(--ally-dim);  border-color: var(--ally); }
+  .unit-icon.enemy { background: var(--enemy-dim); border-color: var(--enemy); }
+  .unit-icon.active-unit { box-shadow: 0 0 8px 2px var(--gold); border-color: var(--gold); }
+
+  .hp-bar {
+    position: absolute;
+    bottom: -4px;
+    left: 0; right: 0;
+    height: 3px;
+    background: #333;
+    border-radius: 2px;
+  }
+  .hp-bar-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  /* awakening ring */
+  .awaken-ring {
+    position: absolute;
+    top: -3px; left: -3px; right: -3px; bottom: -3px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    pointer-events: none;
+  }
+  .awakened .awaken-ring { border-color: var(--gold); animation: pulse-gold 1s infinite; }
+  @keyframes pulse-gold { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── SIDE PANEL ── */
+  #side-panel {
+    width: 230px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .panel-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+  }
+  .panel-box h3 {
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+
+  /* unit detail */
+  #unit-name { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+  #unit-type { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px; }
+  .stat-label { color: var(--muted); }
+  .stat-val   { color: var(--text); font-weight: bold; }
+
+  #hp-display {
+    margin: 6px 0;
+    background: #0d1525;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+  }
+  #hp-display-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+  #hp-text { font-size: 11px; color: var(--silver); text-align: right; }
+
+  /* awaken gauge */
+  #awaken-section { margin-top: 6px; }
+  #awaken-label { font-size: 11px; color: var(--gold); margin-bottom: 2px; }
+  #awaken-bar-bg {
+    background: #0d1525;
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+  }
+  #awaken-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold), #fff);
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+
+  /* skill info */
+  #skill-name { font-weight: bold; font-size: 13px; margin-bottom: 3px; }
+  #skill-desc { font-size: 11px; color: var(--silver); line-height: 1.5; }
+  #skill-cd   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* action buttons */
+  #action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .action-btn {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #0d1525;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 12px;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .action-btn:hover:not(:disabled) { background: var(--cell-h); border-color: var(--ally); }
+  .action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .action-btn.active { background: var(--ally-dim); border-color: var(--ally); }
+  .action-btn.danger { border-color: var(--enemy-dim); }
+  .action-btn.danger:hover:not(:disabled) { background: rgba(204,34,51,0.15); border-color: var(--enemy); }
+  .action-btn.gold { border-color: var(--gold); }
+  .action-btn.gold:hover:not(:disabled) { background: rgba(201,162,39,0.15); }
+
+  /* log */
+  #battle-log {
+    height: 110px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--silver);
+  }
+  #battle-log::-webkit-scrollbar { width: 4px; }
+  #battle-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-dmg    { color: var(--enemy); }
+  .log-heal   { color: var(--green); }
+  .log-skill  { color: var(--gold); }
+  .log-awaken { color: #f0c040; font-weight: bold; }
+  .log-death  { color: #888; }
+  .log-system { color: var(--purple); }
+
+  /* turn order */
+  #turn-order-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .to-chip {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid transparent;
+  }
+  .to-chip.ally  { background: var(--ally-dim);  border-color: var(--ally); }
+  .to-chip.enemy { background: var(--enemy-dim); border-color: var(--enemy); }
+  .to-chip.cur   { border-color: var(--gold); }
+
+  /* overlay */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  #overlay-box {
+    background: var(--panel);
+    border: 2px solid var(--gold);
+    border-radius: 10px;
+    padding: 30px 40px;
+    text-align: center;
+  }
+  #overlay-title {
+    font-family: 'Cinzel', serif;
+    font-size: 28px;
+    color: var(--gold);
+    margin-bottom: 12px;
+  }
+  #overlay-sub { color: var(--silver); margin-bottom: 20px; }
+  #overlay-btn {
+    padding: 10px 28px;
+    background: var(--ally-dim);
+    border: 1px solid var(--ally);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  #overlay-btn:hover { background: var(--ally); }
+  #overlay-btn2 {
+    padding: 10px 28px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--silver);
+    font-size: 14px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+  }
+  #overlay-btn2:hover { background: var(--cell-h); }
+
+  /* rarity stars */
+  .rarity { color: var(--gold); font-size: 10px; letter-spacing: 1px; }
+  .rarity-5, .rarity-6 { color: #f0c040; text-shadow: 0 0 6px rgba(240,192,64,0.6); }
+
+  /* mode select */
+  #mode-select {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+  }
+  #mode-box {
+    background: var(--panel);
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    padding: 36px 48px;
+    text-align: center;
+    min-width: 280px;
+  }
+  #mode-box h2 {
+    font-family: 'Cinzel', serif;
+    font-size: 24px; letter-spacing: 4px;
+    color: var(--gold);
+    margin-bottom: 8px;
+  }
+  #mode-box p { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+  .mode-btn {
+    display: block; width: 100%;
+    padding: 14px 20px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 14px; font-weight: bold;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .mode-btn.quest {
+    background: var(--ally-dim); border: 1px solid var(--ally); color: var(--text);
+  }
+  .mode-btn.quest:hover { background: var(--ally); }
+  .mode-btn.pvp {
+    background: rgba(204,34,51,0.15); border: 1px solid var(--enemy); color: var(--text);
+  }
+  .mode-btn.pvp:hover { background: rgba(204,34,51,0.35); }
+  .mode-btn small { display: block; font-size: 10px; font-weight: normal; color: var(--muted); margin-top: 3px; }
+
+  @media (max-width: 640px) {
+    #main-row { flex-direction: column; }
+    #side-panel { width: 100%; }
+    #field { padding: 3px; gap: 1px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>ARENA TACTICS</h1>
+
+<div id="app">
+  <div id="turn-banner">
+    <span id="turn-info">TURN 1</span>
+    <span id="phase-info">— 行動するユニットを選択 —</span>
+  </div>
+
+  <div id="main-row">
+    <div id="field-wrap">
+      <div id="field"></div>
+    </div>
+
+    <div id="side-panel">
+      <!-- unit info -->
+      <div class="panel-box" id="unit-info-box">
+        <h3>UNIT INFO</h3>
+        <div id="unit-name">—</div>
+        <div id="unit-type">—</div>
+        <div id="hp-display"><div id="hp-display-fill" style="width:100%"></div></div>
+        <div id="hp-text">— / —</div>
+        <div id="stat-rows"></div>
+        <div id="awaken-section" style="display:none">
+          <div id="awaken-label">覚醒ゲージ <span id="awaken-val">0</span>/100</div>
+          <div id="awaken-bar-bg"><div id="awaken-bar-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- skill info -->
+      <div class="panel-box" id="skill-info-box">
+        <h3>SKILL</h3>
+        <div id="skill-name">—</div>
+        <div id="skill-desc">ユニットを選択してください</div>
+        <div id="skill-cd"></div>
+        <div id="passive-desc" style="margin-top:6px; font-size:11px; color: var(--purple);"></div>
+      </div>
+
+      <!-- actions -->
+      <div class="panel-box">
+        <h3>ACTION</h3>
+        <div id="action-buttons">
+          <button class="action-btn" id="btn-move"   disabled>🦶 移動</button>
+          <button class="action-btn danger" id="btn-attack" disabled>⚔️ 攻撃</button>
+          <button class="action-btn gold"  id="btn-skill"  disabled>✨ スキル</button>
+          <button class="action-btn gold"  id="btn-awaken" disabled style="display:none">🔥 覚醒</button>
+          <button class="action-btn"       id="btn-wait"   disabled>⏸ 待機</button>
+        </div>
+      </div>
+
+      <!-- turn order -->
+      <div class="panel-box">
+        <h3>行動順</h3>
+        <div id="turn-order-list"></div>
+      </div>
+
+      <!-- log -->
+      <div class="panel-box">
+        <h3>BATTLE LOG</h3>
+        <div id="battle-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="mode-select">
+  <div id="mode-box">
+    <h2>ARENA TACTICS</h2>
+    <p>モードを選択してください</p>
+    <button class="mode-btn quest" onclick="startMode('quest')">
+      ⚔️ クエスト（vs AI）
+      <small>ランダム配置で敵AIと戦う</small>
+    </button>
+    <button class="mode-btn pvp" onclick="startMode('pvp')">
+      👥 PvP（対人戦）
+      <small>固定配置（味方:下 / 敵:上）</small>
+    </button>
+  </div>
+</div>
+
+<div id="overlay" style="display:none">
+  <div id="overlay-box">
+    <div id="overlay-title">—</div>
+    <div id="overlay-sub">—</div>
+    <button id="overlay-btn" onclick="showModeSelect()">モード選択へ</button>
+    <button id="overlay-btn2" onclick="restartGame()" style="margin-left:10px">もう一度</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  CHARACTER DATA
+// ════════════════════════════════════════════
+const CHAR_POOL = [
+  // ★1
+  { id:'gard',   name:'ガルド',   type:'タンク',    rarity:1, emoji:'🛡',
+    base:{hp:550,atk:45,def:60,spd:30,mov:2,rng:1},
+    active:{name:'シールドバッシュ', desc:'隣接敵1体にATK×1.2＋1Tスタン', cd:3, range:1, aoe:false, kind:'atk', mult:1.2, effect:'stun'},
+    passive:{name:'鉄壁', desc:'HP50%以下でDEF+20%'},
+    awakeable:false },
+  { id:'lina',   name:'リナ',     type:'ヒーラー',  rarity:1, emoji:'💊',
+    base:{hp:400,atk:30,def:35,spd:50,mov:3,rng:2},
+    active:{name:'ハーブヒール', desc:'隣接味方HP+120回復', cd:2, range:2, aoe:false, kind:'heal', healAmt:120},
+    passive:{name:'献身', desc:'隣接味方HP50%以下で毎T+25回復'},
+    awakeable:false },
+  { id:'kain',   name:'カイン',   type:'アサシン',  rarity:1, emoji:'🗡',
+    base:{hp:320,atk:70,def:25,spd:80,mov:4,rng:1},
+    active:{name:'バックスタブ', desc:'単体ATK×1.5(背後×2.0)', cd:3, range:1, aoe:false, kind:'atk', mult:1.5},
+    passive:{name:'回避本能', desc:'SPD高い時被ダメ-10%'},
+    awakeable:false },
+  { id:'blaze',  name:'ブレイズ', type:'ウィザード', rarity:1, emoji:'🔥',
+    base:{hp:350,atk:80,def:20,spd:40,mov:2,rng:3},
+    active:{name:'ファイアボール', desc:'射程3の敵にATK×1.4', cd:3, range:3, aoe:false, kind:'atk', mult:1.4},
+    passive:{name:'魔力蓄積', desc:'攻撃受けた次T ATK+15%'},
+    awakeable:false },
+  { id:'terra',  name:'テラ',     type:'バランサー',rarity:1, emoji:'⚔️',
+    base:{hp:450,atk:55,def:45,spd:55,mov:3,rng:1},
+    active:{name:'コンボスラッシュ', desc:'ATK×1.1を2回', cd:3, range:1, aoe:false, kind:'atk', mult:1.1, hits:2},
+    passive:{name:'適応力', desc:'3Tごとランダムステ+10%'},
+    awakeable:false },
+  // ★2
+  { id:'dragos', name:'ドラゴス', type:'タンク',    rarity:2, emoji:'🏰',
+    base:{hp:750,atk:55,def:80,spd:28,mov:2,rng:1},
+    active:{name:'プロボーク', desc:'射程2内の敵全員に挑発2T', cd:4, range:2, aoe:true, kind:'debuff', effect:'taunt'},
+    passive:{name:'守護の誓い', desc:'隣接味方への攻撃を30%肩代わり'},
+    awakeable:false },
+  { id:'sera',   name:'セラ',     type:'ヒーラー',  rarity:2, emoji:'✨',
+    base:{hp:480,atk:35,def:50,spd:55,mov:3,rng:2},
+    active:{name:'ホーリーライト', desc:'範囲2内の味方全員HP+100＋バリア1T', cd:4, range:2, aoe:true, kind:'heal', healAmt:100},
+    passive:{name:'聖域', desc:'2マス内の味方被ダメ-5%'},
+    awakeable:false },
+  { id:'shadow', name:'シャドウ', type:'アサシン',  rarity:2, emoji:'🌑',
+    base:{hp:380,atk:90,def:30,spd:90,mov:5,rng:1},
+    active:{name:'毒刃', desc:'ATK×1.3＋3T毒(-30/T)', cd:3, range:1, aoe:false, kind:'atk', mult:1.3, effect:'poison'},
+    passive:{name:'影移動', desc:'移動後非隣接なら回避+20%'},
+    awakeable:false },
+  { id:'arc',    name:'アーク',   type:'ウィザード', rarity:2, emoji:'⚡',
+    base:{hp:420,atk:100,def:25,spd:50,mov:2,rng:3},
+    active:{name:'サンダーボルト', desc:'ATK×1.6＋行動遅延', cd:4, range:3, aoe:false, kind:'atk', mult:1.6, effect:'slow'},
+    passive:{name:'帯電', desc:'攻撃命中10%で追加ATK×0.5'},
+    awakeable:false },
+  { id:'bern',   name:'ベルン',   type:'バランサー',rarity:2, emoji:'🎖',
+    base:{hp:560,atk:65,def:55,spd:60,mov:3,rng:1},
+    active:{name:'戦術指揮', desc:'範囲3内の味方全員SPD+15(2T)', cd:5, range:3, aoe:true, kind:'buff', stat:'spd', amt:15},
+    passive:{name:'冷静な判断', desc:'HP30%以下で全ステ+15%'},
+    awakeable:false },
+  // ★3
+  { id:'ironwall',name:'アイアンウォール',type:'タンク',rarity:3,emoji:'🏯',
+    base:{hp:950,atk:65,def:110,spd:25,mov:2,rng:1},
+    active:{name:'大地震撃', desc:'隣接全敵ATK×1.0＋2T移動不可', cd:4, range:1, aoe:true, kind:'atk', mult:1.0, effect:'immobile'},
+    passive:{name:'不動', desc:'移動しないターンDEF+30%'},
+    awakeable:false },
+  { id:'luna',   name:'ルナ',     type:'ヒーラー',  rarity:3, emoji:'🌙',
+    base:{hp:560,atk:45,def:60,spd:65,mov:3,rng:3},
+    active:{name:'月光癒し', desc:'味方1体HP+220＋2T毎T+50再生', cd:3, range:3, aoe:false, kind:'heal', healAmt:220, regen:{amt:50,turns:2}},
+    passive:{name:'月の加護', desc:'毎T終了時HPが最低の味方に+35'},
+    awakeable:false },
+  { id:'fang',   name:'ファング', type:'アサシン',  rarity:3, emoji:'🐺',
+    base:{hp:460,atk:115,def:35,spd:100,mov:5,rng:1},
+    active:{name:'裂爪', desc:'ATK×1.8＋DEF-20%(2T)', cd:4, range:1, aoe:false, kind:'atk', mult:1.8, effect:'defdown'},
+    passive:{name:'血の匂い', desc:'敵HP50%以下でATK+20%'},
+    awakeable:false },
+  { id:'storm',  name:'ストーム', type:'ウィザード', rarity:3, emoji:'🌪',
+    base:{hp:500,atk:130,def:30,spd:55,mov:2,rng:4},
+    active:{name:'ウィンドストーム', desc:'射程4の3×3範囲ATK×1.2', cd:5, range:4, aoe:true, kind:'atk', mult:1.2, aoeSize:3},
+    passive:{name:'嵐の目', desc:'スキル後の次T通常ATK+30%'},
+    awakeable:false },
+  { id:'cross',  name:'クロス',   type:'バランサー',rarity:3, emoji:'⚜️',
+    base:{hp:700,atk:80,def:75,spd:68,mov:3,rng:2},
+    active:{name:'ジャスティスブレイド', desc:'ATK×1.5(悪属性×2.0)', cd:4, range:2, aoe:false, kind:'atk', mult:1.5},
+    passive:{name:'騎士の誓い', desc:'味方撃破ごとATK・DEF+5%(最大+25%)'},
+    awakeable:false },
+  // ★4
+  { id:'colossus',name:'コロッサス',type:'タンク',  rarity:4, emoji:'🗿',
+    base:{hp:1300,atk:80,def:150,spd:22,mov:2,rng:1},
+    active:{name:'コロッサスインパクト', desc:'前方直線3体ATK×1.4＋ノックバック2', cd:5, range:3, aoe:true, kind:'atk', mult:1.4},
+    passive:{name:'絶対防壁', desc:'1Tのダメージ上限=最大HP25%'},
+    awakeable:false },
+  { id:'angel',  name:'エンジェル',type:'ヒーラー', rarity:4, emoji:'👼',
+    base:{hp:680,atk:55,def:80,spd:72,mov:4,rng:3},
+    active:{name:'天光の祝福', desc:'全味方HP+160＋2Tバリア', cd:6, range:99, aoe:true, kind:'heal', healAmt:160},
+    passive:{name:'天使の庇護', desc:'味方致死ダメ1回HP1で生存(1戦1回)'},
+    awakeable:false },
+  { id:'blade',  name:'ブレード', type:'アサシン',  rarity:4, emoji:'🌟',
+    base:{hp:560,atk:155,def:45,spd:115,mov:5,rng:1},
+    active:{name:'一閃', desc:'ATK×2.2(クリ時×3.5)', cd:4, range:1, aoe:false, kind:'atk', mult:2.2, critBonus:3.5},
+    passive:{name:'居合の構え', desc:'移動なし攻撃でクリ率+40%'},
+    awakeable:false },
+  { id:'void',   name:'ヴォイド', type:'ウィザード', rarity:4, emoji:'🌀',
+    base:{hp:580,atk:170,def:35,spd:58,mov:2,rng:4},
+    active:{name:'ヴォイドリフト', desc:'2×2範囲ATK×1.5＋1T沈黙', cd:5, range:4, aoe:true, kind:'atk', mult:1.5, effect:'silence'},
+    passive:{name:'虚無の侵食', desc:'スキルごと対象DEF-10%(最大-40%)'},
+    awakeable:false },
+  { id:'force',  name:'フォース', type:'バランサー',rarity:4, emoji:'🎯',
+    base:{hp:850,atk:95,def:90,spd:75,mov:3,rng:2},
+    active:{name:'フォーメーション', desc:'全味方ATK・DEF+20%(3T)', cd:7, range:99, aoe:true, kind:'buff', stat:'atkdef', amt:20},
+    passive:{name:'戦場の読み', desc:'毎T開始時1体の攻撃を予測回避'},
+    awakeable:false },
+  // ★5
+  { id:'thunderking',name:'サンダーキング',type:'タンク',rarity:5,emoji:'👑',
+    base:{hp:1600,atk:100,def:180,spd:30,mov:2,rng:1},
+    active:{name:'雷帝の盾', desc:'3T完全防壁(-50%)+隣接敵に毎T50雷ダメ', cd:6, range:1, aoe:true, kind:'buff', selfBuff:true},
+    passive:{name:'王の威圧', desc:'2マス内の敵ATK-15%'},
+    awakeable:true,
+    awakenGauge:{onHit:12,onSkill:20},
+    awakenEffect:'被ダメ-40%＋反撃時ATK×0.8＋MOV+1' },
+  { id:'phoenix',name:'フェニックス',type:'ヒーラー',rarity:5,emoji:'🦅',
+    base:{hp:800,atk:65,def:90,spd:80,mov:4,rng:3},
+    active:{name:'フェニックスリバイブ', desc:'撃破済み味方1体をHP50%で復活', cd:8, range:3, aoe:false, kind:'revive'},
+    passive:{name:'炎の加護', desc:'自HP20%以下で毎T+80再生'},
+    awakeable:true,
+    awakenGauge:{onHeal:15,onAllyDeath:30},
+    awakenEffect:'回復×1.8＋毎T全味方+50回復＋無敵1回' },
+  { id:'nightmare',name:'ナイトメア',type:'アサシン',rarity:5,emoji:'👹',
+    base:{hp:650,atk:200,def:50,spd:130,mov:6,rng:1},
+    active:{name:'ナイトメアブレイク', desc:'ATK×2.5＋2T恐怖(30%行動キャンセル)', cd:5, range:1, aoe:false, kind:'atk', mult:2.5, effect:'fear'},
+    passive:{name:'影の跳躍', desc:'移動後攻撃でATK+25%'},
+    awakeable:true,
+    awakenGauge:{onKill:35,onSkillHit:15},
+    awakenEffect:'ATK×1.5＋全攻撃恐怖付与＋毎T自動影ダメ' },
+  { id:'apocalypse',name:'アポカリプス',type:'ウィザード',rarity:5,emoji:'💀',
+    base:{hp:680,atk:220,def:40,spd:62,mov:2,rng:5},
+    active:{name:'終焉の炎', desc:'3×3範囲ATK×2.0暗黒炎ダメ', cd:7, range:5, aoe:true, kind:'atk', mult:2.0, aoeSize:3},
+    passive:{name:'終末の呪い', desc:'スキルダメ受けた敵次TATK-20%'},
+    awakeable:true,
+    awakenGauge:{onSkillHit:20,onMultiHit:15},
+    awakenEffect:'全スキル範囲+1＋スキルダメ×1.6＋業火付与' },
+  { id:'omega',  name:'オメガ',   type:'バランサー',rarity:5, emoji:'Ω',
+    base:{hp:1050,atk:120,def:110,spd:85,mov:3,rng:2},
+    active:{name:'オメガバースト', desc:'3×3範囲ATK×1.8＋自ATK・SPD+20%(3T)', cd:6, range:2, aoe:true, kind:'atk', mult:1.8, aoeSize:3},
+    passive:{name:'進化する力', desc:'敵撃破ごと全ステ+3%(最大+30%)'},
+    awakeable:true,
+    awakenGauge:{onTurnStart:8,onKill:20},
+    awakenEffect:'全ステ×1.4＋毎T自動攻撃(×0.6)＋累積上限撤廃' },
+  // ★6
+  { id:'godshield',name:'ゴッドシールド',type:'タンク',rarity:6,emoji:'🌈',
+    base:{hp:2200,atk:120,def:240,spd:28,mov:2,rng:1},
+    active:{name:'神盾の壁', desc:'全味方に3T神の加護(-60%被ダメ)', cd:8, range:99, aoe:true, kind:'buff', selfBuff:false},
+    passive:{name:'不滅の肉体', desc:'HP0で1回HP25%復活(1戦1回)'},
+    awakeable:true,
+    awakenGauge:{onHit:10,onAllyHit:5},
+    awakenEffect:'DEF×2＋隣接敵毎T80ダメ＋不滅2回化' },
+  { id:'soulsaver',name:'ソウルセイバー',type:'ヒーラー',rarity:6,emoji:'💎',
+    base:{hp:950,atk:80,def:110,spd:90,mov:4,rng:4},
+    active:{name:'ソウルリンク', desc:'味方2体をリンク(ダメ分散5T)', cd:7, range:4, aoe:false, kind:'heal', healAmt:200},
+    passive:{name:'魂の絆', desc:'回復するたびATK+10(累積)'},
+    awakeable:true,
+    awakenGauge:{onHeal:15,onLinkDmg:8},
+    awakenEffect:'全回復×2＋ソウルリンク全味方化＋毎T+80回復' },
+  { id:'deathbringer',name:'デスブリンガー',type:'アサシン',rarity:6,emoji:'💫',
+    base:{hp:800,atk:280,def:60,spd:150,mov:6,rng:1},
+    active:{name:'死の宣告', desc:'ATK×3.0(HP30%以下なら即死)', cd:6, range:1, aoe:false, kind:'atk', mult:3.0, effect:'instaKill'},
+    passive:{name:'死神の鎌', desc:'クリ時対象に3T出血(-50/T)'},
+    awakeable:true,
+    awakenGauge:{onHit:10,onCrit:20,onKill:40},
+    awakenEffect:'ATK×2＋全攻撃クリ確定＋即死閾値50%化' },
+  { id:'cosmos',  name:'コスモス', type:'ウィザード', rarity:6, emoji:'🌌',
+    base:{hp:820,atk:300,def:50,spd:70,mov:2,rng:6},
+    active:{name:'ビッグバン', desc:'全敵ATK×2.5宇宙ダメ＋2T全ステ-20%', cd:10, range:99, aoe:true, kind:'atk', mult:2.5},
+    passive:{name:'宇宙の摂理', desc:'スキルごと次スキルCD-1'},
+    awakeable:true,
+    awakenGauge:{onSkillHit:20,onCDReduce:10},
+    awakenEffect:'全スキルCD半減＋スキルダメ×2＋ビッグバンCD5化' },
+  { id:'eternal', name:'エターナル',type:'バランサー',rarity:6, emoji:'♾️',
+    base:{hp:1350,atk:160,def:150,spd:100,mov:4,rng:3},
+    active:{name:'エターナルレイン', desc:'全敵ATK×1.8＋全味方HP+160＋ATK+15%(3T)', cd:8, range:99, aoe:true, kind:'both', mult:1.8, healAmt:160},
+    passive:{name:'永遠の進化', desc:'経過Tごと全ステ+2%(上限なし)'},
+    awakeable:true,
+    awakenGauge:{onTurnStart:10,onSkill:15,onHeal:10,onHit:8},
+    awakenEffect:'全ステ×1.6＋累積2倍速＋毎T全敵×0.3ダメ' },
+];
+
+// ════════════════════════════════════════════
+//  GAME STATE
+// ════════════════════════════════════════════
+const GRID = 12;
+let state = {};
+
+let gameMode = 'quest'; // 'quest' | 'pvp'
+
+function startMode(mode) {
+  gameMode = mode;
+  document.getElementById('mode-select').style.display = 'none';
+  document.getElementById('battle-log').innerHTML = '';
+  initGame();
+}
+
+function showModeSelect() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('mode-select').style.display = 'flex';
+}
+
+function calcDamage(atk, def) {
+  return Math.max(1, Math.floor(atk * 100 / (100 + def)));
+}
+
+function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function manhattan(a, b) { return Math.abs(a.r - b.r) + Math.abs(a.c - b.c); }
+
+function initGame() {
+  // pick 6 ally + 6 enemy chars randomly (different)
+  const pool = [...CHAR_POOL];
+  const shuffle = a => { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+  shuffle(pool);
+  const allyDefs  = pool.slice(0, 6);
+  const enemyDefs = pool.slice(6, 12);
+
+  // place units based on mode
+  let allyEdge, enemyEdge;
+  if(gameMode === 'pvp') {
+    allyEdge  = 'bottom';
+    enemyEdge = 'top';
+  } else {
+    // quest: random edges
+    const edges = ['top','bottom','left','right'];
+    shuffle(edges);
+    allyEdge  = edges[0];
+    enemyEdge = edges[1];
+  }
+
+  function edgePositions(edge, n) {
+    const positions = [];
+    const mid = Math.floor(GRID / 2);
+    const start = mid - Math.floor(n/2);
+    for(let i=0;i<n;i++){
+      if(edge==='top')    positions.push({r:0, c:start+i});
+      if(edge==='bottom') positions.push({r:GRID-1, c:start+i});
+      if(edge==='left')   positions.push({r:start+i, c:0});
+      if(edge==='right')  positions.push({r:start+i, c:GRID-1});
+    }
+    return positions;
+  }
+
+  const allyPos  = edgePositions(allyEdge, 6);
+  const enemyPos = edgePositions(enemyEdge, 6);
+
+  function makeUnit(def, pos, side, idx) {
+    return {
+      id: `${side}_${idx}`,
+      defId: def.id,
+      name: def.name,
+      type: def.type,
+      rarity: def.rarity,
+      emoji: def.emoji,
+      side,
+      r: pos.r, c: pos.c,
+      maxHp: def.base.hp,
+      hp: def.base.hp,
+      atk: def.base.atk,
+      def: def.base.def,
+      spd: def.base.spd,
+      mov: def.base.mov,
+      rng: def.base.rng,
+      active: {...def.active, curCd:0},
+      passive: def.passive,
+      awakeable: def.awakeable || false,
+      awakenGauge: def.awakeable ? 0 : null,
+      awakenGaugeDef: def.awakenGauge || null,
+      awakenEffect: def.awakenEffect || null,
+      awakened: false,
+      awakenTurns: 0,
+      alive: true,
+      acted: false,
+      statusEffects: [],   // {type, turns}
+      immortalUsed: false,
+    };
+  }
+
+  const allies  = allyDefs.map((d,i)  => makeUnit(d, allyPos[i],  'ally',  i));
+  const enemies = enemyDefs.map((d,i) => makeUnit(d, enemyPos[i], 'enemy', i));
+  const allUnits = [...allies, ...enemies];
+
+  // sort by SPD desc
+  allUnits.sort((a,b) => b.spd - a.spd);
+
+  state = {
+    units: allUnits,
+    turnOrder: allUnits.map(u=>u.id),
+    turnIdx: 0,
+    turnNum: 1,
+    selected: null,
+    phase: 'select',   // select | move | attack | skill
+    highlights: [],
+    log: [],
+  };
+
+  render();
+  addLog(`⚔️ バトル開始！【${gameMode === 'pvp' ? 'PvP — 固定配置' : 'クエスト — ランダム配置'}】`, 'log-system');
+  startTurn();
+}
+
+// ════════════════════════════════════════════
+//  TURN LOGIC
+// ════════════════════════════════════════════
+function liveUnits() { return state.units.filter(u=>u.alive); }
+function allies()    { return liveUnits().filter(u=>u.side==='ally'); }
+function enemies()   { return liveUnits().filter(u=>u.side==='enemy'); }
+function unitAt(r,c) { return liveUnits().find(u=>u.r===r&&u.c===c); }
+
+function startTurn() {
+  // find next alive unit
+  let tries = 0;
+  while(tries < state.turnOrder.length * 2) {
+    const uid = state.turnOrder[state.turnIdx % state.turnOrder.length];
+    const u = state.units.find(x=>x.id===uid);
+    if(u && u.alive) break;
+    state.turnIdx++;
+    tries++;
+    if(state.turnIdx % state.turnOrder.length === 0) state.turnNum++;
+  }
+
+  // new round
+  if(state.turnIdx > 0 && state.turnIdx % state.turnOrder.length === 0) {
+    state.turnNum++;
+    tickPassives();
+  }
+
+  const uid = state.turnOrder[state.turnIdx % state.turnOrder.length];
+  const u = state.units.find(x=>x.id===uid);
+
+  state.selected = u.id;
+  state.phase = 'select';
+  state.highlights = [];
+
+  // tick status effects
+  tickStatus(u);
+
+  // awaken turns countdown
+  if(u.awakenTurns > 0) {
+    u.awakenTurns--;
+    if(u.awakenTurns === 0) { u.awakened = false; addLog(`${u.name}の覚醒が解除された`, 'log-system'); }
+  }
+
+  // awaken gauge: turn start
+  if(u.awakeable && u.awakenGaugeDef?.onTurnStart) {
+    u.awakenGauge = Math.min(100, u.awakenGauge + u.awakenGaugeDef.onTurnStart);
+  }
+
+  // cd tick
+  if(u.active.curCd > 0) u.active.curCd--;
+
+  u.acted = false;
+
+  if(u.side === 'enemy') {
+    setTimeout(() => aiTurn(u), 500);
+  }
+
+  render();
+  updatePhaseInfo();
+}
+
+function tickStatus(u) {
+  u.statusEffects = u.statusEffects.filter(e => {
+    if(e.type === 'poison') { dealRawDamage(u, e.amt||30); addLog(`${u.name}は毒でHP-${e.amt||30}`, 'log-dmg'); }
+    if(e.type === 'bleed')  { dealRawDamage(u, e.amt||50); addLog(`${u.name}は出血でHP-${e.amt||50}`, 'log-dmg'); }
+    if(e.type === 'burn')   { dealRawDamage(u, e.amt||40); addLog(`${u.name}は業火でHP-${e.amt||40}`, 'log-dmg'); }
+    if(e.type === 'regen')  { healUnit(u, e.amt||50); addLog(`${u.name}はHP+${e.amt||50}再生`, 'log-heal'); }
+    e.turns--;
+    return e.turns > 0;
+  });
+}
+
+function tickPassives() {
+  // luna passive: heal lowest HP ally
+  liveUnits().forEach(u => {
+    if(u.defId === 'luna') {
+      const team = liveUnits().filter(x=>x.side===u.side);
+      const lowest = team.sort((a,b)=>a.hp-b.hp)[0];
+      if(lowest) { healUnit(lowest, 35); addLog(`ルナのパッシブ: ${lowest.name}HP+35`, 'log-heal'); }
+    }
+    // eternal passive
+    if(u.defId === 'eternal' && u.alive) {
+      const boost = 0.02;
+      u.atk = Math.floor(u.atk * (1+boost));
+      u.def = Math.floor(u.def * (1+boost));
+    }
+  });
+}
+
+function dealRawDamage(u, amt) {
+  u.hp = Math.max(0, u.hp - amt);
+  checkDeath(u);
+}
+
+function healUnit(u, amt) {
+  u.hp = Math.min(u.maxHp, u.hp + amt);
+}
+
+function checkDeath(u) {
+  if(u.hp <= 0) {
+    // immortal passive
+    if(!u.immortalUsed && (u.defId==='godshield'||u.passive?.desc?.includes('復活'))) {
+      u.hp = Math.floor(u.maxHp * 0.25);
+      u.immortalUsed = true;
+      addLog(`💫 ${u.name}は不滅の力でHP${u.hp}で復活！`, 'log-awaken');
+      return;
+    }
+    u.alive = false;
+    u.hp = 0;
+    addLog(`💀 ${u.name} 戦闘不能`, 'log-death');
+    checkVictory();
+  }
+}
+
+function checkVictory() {
+  if(enemies().length === 0) { endGame('VICTORY', '全ての敵を倒した！'); return; }
+  if(allies().length  === 0) { endGame('DEFEAT',  '全滅してしまった...'); return; }
+}
+
+function endGame(title, sub) {
+  document.getElementById('overlay-title').textContent = title;
+  document.getElementById('overlay-sub').textContent   = sub;
+  document.getElementById('overlay').style.display = 'flex';
+}
+
+// ════════════════════════════════════════════
+//  AI
+// ════════════════════════════════════════════
+function aiTurn(u) {
+  if(!u.alive) { nextTurn(); return; }
+
+  // find closest enemy (ally for enemy AI)
+  const targets = allies();
+  if(!targets.length) { nextTurn(); return; }
+
+  targets.sort((a,b) => manhattan(u,a) - manhattan(u,b));
+  const target = targets[0];
+  const dist = manhattan(u, target);
+
+  // try skill
+  if(u.active.curCd === 0 && dist <= u.active.range + u.mov) {
+    // move closer if needed
+    if(dist > u.active.range) moveToward(u, target, u.mov);
+    useSkillAI(u, target);
+    addLog(`${u.name} → スキル「${u.active.name}」！`, 'log-skill');
+  } else if(dist <= u.rng + u.mov) {
+    // move closer if needed
+    if(dist > u.rng) moveToward(u, target, u.mov);
+    // attack
+    if(manhattan(u, target) <= u.rng) {
+      const dmg = calcDamage(u.atk, target.def);
+      dealRawDamage(target, dmg);
+      addLog(`${u.name} → ${target.name} に ${dmg} ダメージ`, 'log-dmg');
+      addAwakenGauge(u,'onHit'); addAwakenGauge(target,'onHit');
+    }
+  } else {
+    moveToward(u, target, u.mov);
+  }
+
+  u.acted = true;
+  render();
+  setTimeout(nextTurn, 400);
+}
+
+function moveToward(u, target, steps) {
+  for(let i=0;i<steps;i++){
+    const dr = Math.sign(target.r - u.r);
+    const dc = Math.sign(target.c - u.c);
+    const nr = u.r + dr, nc = u.c + dc;
+    if(nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&!unitAt(nr,nc)) { u.r=nr; u.c=nc; }
+    else if(!unitAt(u.r+dr,u.c)&&u.r+dr>=0&&u.r+dr<GRID) u.r+=dr;
+    else if(!unitAt(u.r,u.c+dc)&&u.c+dc>=0&&u.c+dc<GRID) u.c+=dc;
+  }
+}
+
+function useSkillAI(u, target) {
+  const sk = u.active;
+  if(sk.kind === 'heal') {
+    const t = liveUnits().filter(x=>x.side===u.side).sort((a,b)=>a.hp-b.hp)[0];
+    if(t) { healUnit(t, sk.healAmt||100); }
+  } else if(sk.kind === 'atk') {
+    const dmg = calcDamage(Math.floor(u.atk * (sk.mult||1)), target.def);
+    dealRawDamage(target, dmg);
+    addLog(`${u.name} の「${sk.name}」→ ${target.name} に ${dmg} ダメージ！`, 'log-skill');
+    addAwakenGauge(u,'onSkillHit');
+    applyEffect(target, sk.effect);
+  }
+  u.active.curCd = u.active.cd;
+  if(u.awakeable && u.awakenGaugeDef?.onSkill) {
+    u.awakenGauge = Math.min(100, u.awakenGauge + u.awakenGaugeDef.onSkill);
+  }
+}
+
+// ════════════════════════════════════════════
+//  PLAYER ACTIONS
+// ════════════════════════════════════════════
+function currentUnit() {
+  const uid = state.turnOrder[state.turnIdx % state.turnOrder.length];
+  return state.units.find(x=>x.id===uid);
+}
+
+function isPlayerTurn() {
+  const u = currentUnit();
+  return u && u.side === 'ally' && u.alive;
+}
+
+function getMoveRange(u) {
+  const cells = [];
+  for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++) {
+    if(manhattan({r,c},u) <= u.mov && !unitAt(r,c)) cells.push({r,c});
+  }
+  return cells;
+}
+
+function getAttackRange(u) {
+  const cells = [];
+  for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++) {
+    const t = unitAt(r,c);
+    if(t && t.side !== u.side && manhattan({r,c},u) <= u.rng) cells.push({r,c});
+  }
+  return cells;
+}
+
+function getSkillRange(u) {
+  const cells = [];
+  for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++) {
+    const dist = manhattan({r,c},u);
+    if(dist <= u.active.range) {
+      const t = unitAt(r,c);
+      const sk = u.active;
+      if(sk.kind==='heal'||sk.kind==='buff') { if(t&&t.side===u.side) cells.push({r,c}); }
+      else if(sk.kind==='revive') { /* handled separately */ }
+      else { if(t&&t.side!==u.side) cells.push({r,c}); }
+    }
+  }
+  if(u.active.range >= 99) {
+    // global skill
+    liveUnits().forEach(t => {
+      const sk = u.active;
+      const valid = (sk.kind==='heal'||sk.kind==='buff') ? t.side===u.side : t.side!==u.side;
+      if(valid) cells.push({r:t.r,c:t.c});
+    });
+  }
+  return cells;
+}
+
+document.getElementById('btn-move').onclick = () => {
+  if(!isPlayerTurn()) return;
+  const u = currentUnit();
+  state.phase = 'move';
+  state.highlights = getMoveRange(u).map(p=>({...p,kind:'move'}));
+  render();
+};
+
+document.getElementById('btn-attack').onclick = () => {
+  if(!isPlayerTurn()) return;
+  const u = currentUnit();
+  state.phase = 'attack';
+  state.highlights = getAttackRange(u).map(p=>({...p,kind:'atk'}));
+  render();
+};
+
+document.getElementById('btn-skill').onclick = () => {
+  if(!isPlayerTurn()) return;
+  const u = currentUnit();
+  if(u.active.curCd > 0) { addLog('スキルはクールダウン中', 'log-system'); return; }
+  state.phase = 'skill';
+  state.highlights = getSkillRange(u).map(p=>({...p,kind:'skill'}));
+  render();
+};
+
+document.getElementById('btn-awaken').onclick = () => {
+  if(!isPlayerTurn()) return;
+  const u = currentUnit();
+  if(u.awakenGauge < 100) return;
+  u.awakened = true;
+  u.awakenTurns = 5;
+  u.awakenGauge = 0;
+  addLog(`🔥🔥 ${u.name} 覚醒！！ → ${u.awakenEffect}`, 'log-awaken');
+  // apply stat boost
+  u.atk = Math.floor(u.atk * 1.3);
+  u.def = Math.floor(u.def * 1.2);
+  nextTurn();
+};
+
+document.getElementById('btn-wait').onclick = () => {
+  if(!isPlayerTurn()) return;
+  addLog(`${currentUnit().name} は待機した`, 'log-system');
+  nextTurn();
+};
+
+function onCellClick(r, c) {
+  if(!isPlayerTurn()) return;
+  const u = currentUnit();
+  if(!u || !u.alive) return;
+
+  if(state.phase === 'move') {
+    const valid = state.highlights.find(h=>h.r===r&&h.c===c&&h.kind==='move');
+    if(valid) {
+      u.r = r; u.c = c;
+      state.phase = 'select';
+      state.highlights = [];
+      addLog(`${u.name} が移動した`, 'log-system');
+      render();
+    }
+  } else if(state.phase === 'attack') {
+    const t = unitAt(r,c);
+    if(t && t.side !== u.side && manhattan(u,t) <= u.rng) {
+      const dmg = calcDamage(u.atk, t.def);
+      dealRawDamage(t, dmg);
+      addLog(`${u.name} → ${t.name} に ${dmg} ダメージ！`, 'log-dmg');
+      addAwakenGauge(u,'onHit'); addAwakenGauge(t,'onHit');
+      // passive: iron wall
+      if(u.defId==='ironwall') state.lastMoved = false;
+      state.phase = 'select';
+      state.highlights = [];
+      u.acted = true;
+      render();
+      nextTurn();
+    }
+  } else if(state.phase === 'skill') {
+    const sk = u.active;
+    if(sk.kind === 'heal' || sk.kind === 'buff') {
+      const t = unitAt(r,c);
+      if(t && t.side === u.side) {
+        executeSkill(u, t, r, c);
+      }
+    } else if(sk.range >= 99) {
+      // global auto
+      executeSkillGlobal(u);
+    } else {
+      const t = unitAt(r,c);
+      if(t && t.side !== u.side && manhattan(u,t) <= sk.range) {
+        executeSkill(u, t, r, c);
+      }
+    }
+  } else {
+    // select info
+    const t = unitAt(r,c);
+    if(t) showUnitInfo(t);
+  }
+}
+
+function executeSkill(u, target, tr, tc) {
+  const sk = u.active;
+  sk.curCd = sk.cd;
+  addLog(`✨ ${u.name}「${sk.name}」発動！`, 'log-skill');
+
+  if(sk.kind === 'heal') {
+    if(sk.aoe) {
+      liveUnits().filter(x=>x.side===u.side&&manhattan(u,x)<=sk.range).forEach(t=>{
+        healUnit(t, sk.healAmt); addLog(`${t.name} HP+${sk.healAmt}`, 'log-heal');
+      });
+    } else {
+      healUnit(target, sk.healAmt); addLog(`${target.name} HP+${sk.healAmt}`, 'log-heal');
+      if(sk.regen) target.statusEffects.push({type:'regen',amt:sk.regen.amt,turns:sk.regen.turns});
+    }
+    addAwakenGauge(u,'onHeal');
+  } else if(sk.kind === 'buff') {
+    const targets = sk.range>=99 ? liveUnits().filter(x=>x.side===u.side) :
+                                   liveUnits().filter(x=>x.side===u.side&&manhattan(u,x)<=sk.range);
+    targets.forEach(t => {
+      if(sk.stat==='spd') t.spd += sk.amt;
+      if(sk.stat==='atkdef') { t.atk=Math.floor(t.atk*1.2); t.def=Math.floor(t.def*1.2); }
+      addLog(`${t.name} バフ付与`, 'log-skill');
+    });
+  } else if(sk.kind === 'atk') {
+    const mult = sk.mult || 1;
+    if(sk.aoe) {
+      const sz = sk.aoeSize || 1;
+      liveUnits().filter(x=>x.side!==u.side&&Math.abs(x.r-tr)<=Math.floor(sz/2)&&Math.abs(x.c-tc)<=Math.floor(sz/2)).forEach(t=>{
+        const dmg = calcDamage(Math.floor(u.atk*mult), t.def);
+        dealRawDamage(t, dmg);
+        addLog(`${t.name} に ${dmg} ダメージ！`, 'log-dmg');
+        applyEffect(t, sk.effect);
+        addAwakenGauge(u,'onSkillHit');
+      });
+    } else {
+      const hits = sk.hits || 1;
+      for(let h=0;h<hits;h++){
+        const dmg = calcDamage(Math.floor(u.atk*mult), target.def);
+        dealRawDamage(target, dmg);
+        addLog(`${target.name} に ${dmg} ダメージ！`, 'log-dmg');
+      }
+      applyEffect(target, sk.effect);
+      addAwakenGauge(u,'onSkillHit');
+    }
+  }
+
+  if(u.awakeable && u.awakenGaugeDef?.onSkill) {
+    u.awakenGauge = Math.min(100, u.awakenGauge + u.awakenGaugeDef.onSkill);
+  }
+
+  state.phase = 'select';
+  state.highlights = [];
+  u.acted = true;
+  render();
+  nextTurn();
+}
+
+function executeSkillGlobal(u) {
+  const sk = u.active;
+  sk.curCd = sk.cd;
+  addLog(`✨ ${u.name}「${sk.name}」発動！`, 'log-skill');
+
+  if(sk.kind === 'atk' || sk.kind === 'both') {
+    liveUnits().filter(x=>x.side!==u.side).forEach(t=>{
+      const dmg = calcDamage(Math.floor(u.atk*(sk.mult||1)), t.def);
+      dealRawDamage(t, dmg);
+      addLog(`${t.name} に ${dmg} ダメージ！`, 'log-dmg');
+    });
+  }
+  if(sk.kind === 'heal' || sk.kind === 'both') {
+    liveUnits().filter(x=>x.side===u.side).forEach(t=>{
+      healUnit(t, sk.healAmt||100);
+      addLog(`${t.name} HP+${sk.healAmt||100}`, 'log-heal');
+    });
+  }
+
+  if(u.awakeable && u.awakenGaugeDef?.onSkill) {
+    u.awakenGauge = Math.min(100, u.awakenGauge + u.awakenGaugeDef.onSkill);
+  }
+
+  state.phase = 'select';
+  state.highlights = [];
+  u.acted = true;
+  render();
+  nextTurn();
+}
+
+function applyEffect(target, effect) {
+  if(!effect) return;
+  if(effect === 'poison')   target.statusEffects.push({type:'poison',amt:30,turns:3});
+  if(effect === 'stun')     target.statusEffects.push({type:'stun',turns:1});
+  if(effect === 'fear')     target.statusEffects.push({type:'fear',turns:2});
+  if(effect === 'silence')  target.statusEffects.push({type:'silence',turns:1});
+  if(effect === 'slow')     target.statusEffects.push({type:'slow',turns:1});
+  if(effect === 'defdown')  target.statusEffects.push({type:'defdown',amt:0.8,turns:2});
+  if(effect === 'immobile') target.statusEffects.push({type:'immobile',turns:2});
+  if(effect === 'bleed')    target.statusEffects.push({type:'bleed',amt:50,turns:3});
+}
+
+function addAwakenGauge(u, trigger) {
+  if(!u.awakeable || u.awakened || !u.awakenGaugeDef) return;
+  const amt = u.awakenGaugeDef[trigger] || 0;
+  if(amt > 0) {
+    u.awakenGauge = Math.min(100, u.awakenGauge + amt);
+  }
+}
+
+function nextTurn() {
+  state.turnIdx++;
+  if(state.turnIdx % state.turnOrder.length === 0) state.turnNum++;
+  checkVictory();
+  if(!state.units.some(u=>u.alive)) return;
+  // skip dead units
+  let tries = 0;
+  while(tries < 20) {
+    const uid = state.turnOrder[state.turnIdx % state.turnOrder.length];
+    const u = state.units.find(x=>x.id===uid);
+    if(u && u.alive) break;
+    state.turnIdx++;
+    tries++;
+  }
+  startTurn();
+}
+
+// ════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════
+function render() {
+  renderField();
+  renderSidePanel();
+  renderTurnOrder();
+  updatePhaseInfo();
+}
+
+function renderField() {
+  const field = document.getElementById('field');
+  field.style.gridTemplateColumns = `repeat(${GRID}, 1fr)`;
+
+  if(field.children.length !== GRID*GRID) {
+    field.innerHTML = '';
+    for(let r=0;r<GRID;r++) for(let c=0;c<GRID;c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+      cell.onclick = ()=>onCellClick(+cell.dataset.r, +cell.dataset.c);
+      field.appendChild(cell);
+    }
+  }
+
+  const cells = field.querySelectorAll('.cell');
+  const hlMap = {};
+  state.highlights.forEach(h=>hlMap[`${h.r}_${h.c}`]=h.kind);
+
+  const cur = currentUnit();
+
+  cells.forEach(cell => {
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    const key = `${r}_${c}`;
+    cell.className = 'cell';
+    if(hlMap[key]) cell.classList.add(hlMap[key]+'-range');
+
+    const u = unitAt(r,c);
+    if(u) {
+      const isCur = cur && u.id === cur.id;
+      const icon = document.createElement('div');
+      icon.className = `unit-icon ${u.side}${isCur?' active-unit':''}${u.awakened?' awakened':''}`;
+      icon.textContent = u.emoji;
+      if(u.awakened) {
+        const ring = document.createElement('div');
+        ring.className = 'awaken-ring';
+        icon.appendChild(ring);
+      }
+
+      const hpBar = document.createElement('div');
+      hpBar.className = 'hp-bar';
+      const fill = document.createElement('div');
+      fill.className = 'hp-bar-fill';
+      const pct = u.hp / u.maxHp * 100;
+      fill.style.width = pct+'%';
+      fill.style.background = pct>60?'var(--green)':pct>30?'#f39c12':'var(--enemy)';
+      hpBar.appendChild(fill);
+      icon.appendChild(hpBar);
+
+      cell.appendChild(icon);
+    }
+  });
+}
+
+function renderSidePanel() {
+  const u = state.selected ? state.units.find(x=>x.id===state.selected) : null;
+  if(!u) return;
+  showUnitInfo(u);
+}
+
+function showUnitInfo(u) {
+  const stars = '★'.repeat(u.rarity);
+  document.getElementById('unit-name').innerHTML =
+    `${u.emoji} ${u.name} <span class="rarity rarity-${u.rarity}">${stars}</span>`;
+  document.getElementById('unit-type').textContent = `[${u.type}]`;
+
+  const pct = u.hp / u.maxHp * 100;
+  document.getElementById('hp-display-fill').style.width = pct+'%';
+  document.getElementById('hp-display-fill').style.background =
+    pct>60?'var(--green)':pct>30?'#f39c12':'var(--enemy)';
+  document.getElementById('hp-text').textContent = `${u.hp} / ${u.maxHp}`;
+
+  document.getElementById('stat-rows').innerHTML = `
+    <div class="stat-row"><span class="stat-label">ATK</span><span class="stat-val">${u.atk}</span></div>
+    <div class="stat-row"><span class="stat-label">DEF</span><span class="stat-val">${u.def}</span></div>
+    <div class="stat-row"><span class="stat-label">SPD</span><span class="stat-val">${u.spd}</span></div>
+    <div class="stat-row"><span class="stat-label">MOV</span><span class="stat-val">${u.mov}</span></div>
+    <div class="stat-row"><span class="stat-label">RNG</span><span class="stat-val">${u.rng}</span></div>
+  `;
+
+  const awsec = document.getElementById('awaken-section');
+  if(u.awakeable) {
+    awsec.style.display = 'block';
+    document.getElementById('awaken-val').textContent = u.awakenGauge;
+    document.getElementById('awaken-bar-fill').style.width = u.awakenGauge+'%';
+  } else {
+    awsec.style.display = 'none';
+  }
+
+  // skill info
+  document.getElementById('skill-name').textContent = u.active.name;
+  document.getElementById('skill-desc').textContent = u.active.desc;
+  document.getElementById('skill-cd').textContent =
+    u.active.curCd > 0 ? `CT: ${u.active.curCd}T` : 'CT: 使用可能';
+  document.getElementById('passive-desc').textContent =
+    u.passive ? `[パッシブ] ${u.passive.name}: ${u.passive.desc}` : '';
+
+  // buttons
+  const isMe = currentUnit()?.id === u.id;
+  const isPlayer = isPlayerTurn() && isMe;
+  document.getElementById('btn-move').disabled   = !isPlayer;
+  document.getElementById('btn-attack').disabled = !isPlayer;
+  document.getElementById('btn-skill').disabled  = !isPlayer || u.active.curCd > 0;
+  document.getElementById('btn-wait').disabled   = !isPlayer;
+
+  const btnAwaken = document.getElementById('btn-awaken');
+  if(u.awakeable) {
+    btnAwaken.style.display = 'block';
+    btnAwaken.disabled = !(isPlayer && u.awakenGauge >= 100 && !u.awakened);
+  } else {
+    btnAwaken.style.display = 'none';
+  }
+}
+
+function renderTurnOrder() {
+  const list = document.getElementById('turn-order-list');
+  list.innerHTML = '';
+  const cur = currentUnit();
+  const alive = liveUnits();
+  // show next 8 in order
+  let shown = 0;
+  let idx = state.turnIdx % state.turnOrder.length;
+  for(let i=0;i<state.turnOrder.length && shown<8;i++) {
+    const uid = state.turnOrder[(idx+i)%state.turnOrder.length];
+    const u = state.units.find(x=>x.id===uid);
+    if(!u||!u.alive) continue;
+    const chip = document.createElement('div');
+    chip.className = `to-chip ${u.side}${cur&&u.id===cur.id?' cur':''}`;
+    chip.textContent = u.emoji+u.name.slice(0,3);
+    list.appendChild(chip);
+    shown++;
+  }
+}
+
+function updatePhaseInfo() {
+  const cur = currentUnit();
+  if(!cur) return;
+  document.getElementById('turn-info').textContent = `TURN ${state.turnNum}`;
+  const pmap = {select:'行動を選択', move:'移動先を選択', attack:'攻撃対象を選択', skill:'スキル対象を選択'};
+  const side = cur.side==='ally'?'▶ あなたのターン':'⚙ 敵のターン';
+  document.getElementById('phase-info').textContent =
+    `${cur.emoji}${cur.name} — ${side} — ${pmap[state.phase]||''}`;
+}
+
+function addLog(msg, cls) {
+  const log = document.getElementById('battle-log');
+  const p = document.createElement('p');
+  p.className = cls || '';
+  p.textContent = msg;
+  log.appendChild(p);
+  log.scrollTop = log.scrollHeight;
+  state.log.push(msg);
+}
+
+// ════════════════════════════════════════════
+//  RESTART
+// ════════════════════════════════════════════
+function restartGame() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('battle-log').innerHTML = '';
+  initGame();
+}
+
+// ════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════
+// Start with mode select screen (don't auto-start)
+</script>
+</body>
+</html>
